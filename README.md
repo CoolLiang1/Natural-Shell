@@ -1,156 +1,94 @@
-# nsh — Natural Shell
+# nsh - Natural Shell
 
-[![Python](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.13%2B-blue)](https://www.python.org/)
+[![CLI](https://img.shields.io/badge/CLI-Typer-0f766e)](https://typer.tiangolo.com/)
+[![UI](https://img.shields.io/badge/UI-Rich-9333ea)](https://rich.readthedocs.io/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](#license)
 
-**nsh** 是一个命令行工具，能将自然语言（中文 / 英文）翻译为 Ubuntu shell 命令，
-并安全地执行。基于 DeepSeek API 驱动。
+**nsh** is a Chinese-first command-line assistant that translates natural language into Ubuntu shell commands. It can preview generated commands, remember recent command context, detect dangerous patterns, and execute only after confirmation.
 
-## 特性
+> Describe what you want in Chinese or English. nsh turns it into a shell command you can inspect before running.
 
-- **自然语言 → Shell 命令** — 用日常语言描述想做的事，自动生成命令
-- **上下文衔接** — 记住最近的操作，"安装 nginx" 之后说 "启动它" 就能识别
-- **Rich 命令预览** — 语法高亮 + 面板展示，安全命令绿框，危险命令红框
-- **危险命令拦截** — 四重严重度分级（LOW / MEDIUM / HIGH / CRITICAL），危险命令需确认
-- **一键执行** — 支持 `--yes` 跳过确认直接执行
+## Highlights
 
-## 安装
+- **Natural language to shell**: translate Chinese or English instructions into Ubuntu/Debian shell commands.
+- **Safe by default**: generated commands are shown first and require confirmation before execution.
+- **Danger detection**: risky patterns are grouped by severity and critical commands require double confirmation.
+- **Context memory**: recent translations help resolve follow-up prompts such as "start it" after "install nginx".
+- **Rich terminal output**: syntax-highlighted command previews, panels, tables, and status messages.
+- **Configurable API backend**: uses the Anthropic Python SDK with an Anthropic-compatible endpoint.
 
-### 前置要求
+## Table of Contents
+
+- [How It Works](#how-it-works)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [Safety Model](#safety-model)
+- [Project Structure](#project-structure)
+- [Development](#development)
+- [Roadmap](#roadmap)
+- [License](#license)
+
+## How It Works
+
+```mermaid
+flowchart LR
+    A["User prompt<br/>Chinese or English"] --> B["Typer CLI<br/>nsh / nsh ask"]
+    B --> C["Session context<br/>recent prompts"]
+    C --> D["Translator<br/>Anthropic-compatible API"]
+    D --> E["Generated shell command"]
+    E --> F["Safety scanner<br/>severity matching"]
+    F --> G{"Execute?"}
+    G -->|"ask mode"| H["Print command only"]
+    G -->|"confirmed"| I["subprocess execution"]
+    I --> J["Captured stdout / stderr"]
+```
+
+## Requirements
 
 - Python 3.13+
-- Ubuntu / Debian 系统
+- Ubuntu or Debian-compatible shell environment
+- An Anthropic-compatible API key
+
+## Installation
+
+Clone the repository and install it in editable mode:
 
 ```bash
-# 克隆仓库
-git clone https://github.com/CoolLiang/nsh.git
-cd nsh
-
-# 安装
+git clone https://github.com/CoolLiang1/Natural-Shell.git
+cd Natural-Shell
 pip install -e .
 ```
 
-### 配置 API Key
+For development tools:
 
 ```bash
-# 方式一：环境变量（推荐）
-export ANTHROPIC_API_KEY="sk-your-key-here"
+pip install -e ".[dev]"
+```
 
-# 方式二：配置文件
+## Configuration
+
+nsh reads configuration from `~/.config/nsh/config.json`. The `ANTHROPIC_API_KEY` environment variable takes priority over the saved config value.
+
+Set your API key with an environment variable:
+
+```bash
+export ANTHROPIC_API_KEY="sk-your-key-here"
+```
+
+Or store it in the nsh config file:
+
+```bash
 nsh config set api_key sk-your-key-here
 ```
 
-默认使用 DeepSeek 代理地址，如需更换：
-```bash
-nsh config set base_url https://api.deepseek.com/anthropic
-```
-
-## 使用方法
-
-### `nsh ask` — 翻译命令（不执行）
-
-```bash
-nsh ask "列出所有本周修改的 PDF 文件"
-nsh ask "查找占用 CPU 最高的 5 个进程"
-nsh ask "安装 docker 并启动"
-```
-
-输出示例：
-
-```
-┏━━━━━━━━━━━━━━━━━━━━━ 生成的命令 ━━━━━━━━━━━━━━━━━━━━━┓
-┃                                                        ┃
-┃  find . -name "*.pdf" -mtime -7                        ┃
-┃                                                        ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-```
-
-### `nsh` — 翻译并执行
-
-```bash
-nsh "安装 nginx"
-nsh --yes "列出当前目录的大文件"
-```
-
-流程：`翻译 → 展示命令 → 确认 → 执行`
-
-```
-┏━━━━━━━━━━━━━━━━━━━━━ 生成的命令 ━━━━━━━━━━━━━━━━━━━━━┓
-┃  sudo apt install -y nginx                              ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-
-是否执行此命令？ [y/N]: y
-
-执行中…
-✓ 执行成功 (exit code: 0)
-```
-
-### 选项
-
-| 选项 | 说明 |
-|---|---|
-| `--yes` `-y` | 跳过确认，直接执行 |
-| `--model` `-m` | 指定模型（覆盖配置） |
-| `--no-session` | 不注入会话上下文 |
-| `--interactive` `-i` | 交互模式执行（保留终端，用于 vim/less 等） |
-
-### 上下文衔接示例
-
-```bash
-$ nsh "安装 nginx"
-→ sudo apt install -y nginx           # 执行成功，记录到会话
-
-$ nsh "启动它"
-→ sudo systemctl start nginx          # "它" → nginx（从会话推断）
-```
-
-### 危险命令拦截
-
-当命令包含危险操作时，红色面板警告：
-
-```
-┏━━━━━━━━━━━━━━━━━━━━━ ⚠ 危险命令 ━━━━━━━━━━━━━━━━━━━━━┓
-┃  rm -rf / --no-preserve-root                           ┃
-┃                                                        ┃
-┃  🚫 检测到以下危险模式：                                ┃
-┃    • rm -rf / — 递归删除根目录                          ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-┏━━━━━━━━━━━━━━━━━━━━ ⚠ 安全警告 ━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ 此命令包含危险操作，执行可能导致数据丢失或系统损坏。    ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-
-确定要执行此危险命令吗？ [y/N]: y
-⚠ 此命令可能造成不可逆的系统损坏！
-再次确认：你真的要执行吗？ [y/N]: n
-
-已取消执行。
-```
-
-### `nsh session` — 管理会话历史
-
-```bash
-nsh session              # 查看历史
-nsh session --clear      # 清除历史
-```
-
-### `nsh config` — 管理配置
-
-```bash
-nsh config get                # 查看所有配置
-nsh config get base_url       # 查看单项
-nsh config set model deepseek-v4-flash
-nsh config set auto_execute true
-nsh config path               # 配置文件路径
-nsh config reset              # 恢复默认值
-```
-
-### 配置文件
-
-位置：`~/.config/nsh/config.json`
+Default config values:
 
 ```json
 {
-  "api_key": "sk-xxx",
+  "api_key": null,
   "base_url": "https://api.deepseek.com/anthropic",
   "model": "deepseek-v4-flash",
   "max_tokens": 500,
@@ -160,41 +98,149 @@ nsh config reset              # 恢复默认值
 }
 ```
 
-## 安全机制
-
-| 级别 | 示例 | 确认流程 |
-|---|---|---|
-| LOW | `apt autoremove` | 仅记录 |
-| MEDIUM | `shutdown`, `reboot` | 需确认 |
-| HIGH | `rm -rf *`, `curl \| bash` | 需确认 |
-| CRITICAL | `rm -rf /`, fork bomb, `dd of=/dev/sda` | **双重确认** |
-
-共检测 **34 种**危险模式，包括：
-- 磁盘破坏（`rm -rf /`、`dd`、`mkfs`、`fdisk`）
-- 远程代码执行（`curl \| bash`、`wget \| sh`）
-- 系统关机（`shutdown`、`reboot`、`halt`）
-- Fork bomb（`:(){ :|:& };:`）
-- 系统文件覆写（`/etc/passwd`、`/etc/shadow`、`/boot/`）
-- 批量杀进程（`kill -9 -1`、`killall`）
-
-## 项目结构
-
-```
-nsh/
-├── __init__.py       # 包初始化
-├── main.py           # Typer CLI 入口 + Rich 面板渲染
-├── config.py         # ~/.config/nsh/config.json 管理
-├── translator.py     # DeepSeek API 调用（NL → 命令）
-├── executor.py       # 安全检测 + 命令执行
-└── session.py        # 会话缓存（上下文记忆）
-```
-
-## 开发
+Useful config commands:
 
 ```bash
-pip install -e ".[dev]"    # 安装开发依赖
-python -m nsh.main --help  # 本地调试
+nsh config get
+nsh config get model
+nsh config set model deepseek-v4-flash
+nsh config set auto_execute false
+nsh config path
+nsh config reset
 ```
+
+## Usage
+
+### Translate Without Running
+
+Use `nsh ask` when you only want to generate and inspect a command:
+
+```bash
+nsh ask "列出所有本周修改过的 PDF 文件"
+nsh ask "find the 5 processes using the most CPU"
+```
+
+Example output:
+
+```text
+┏━━━━━━━━━━━━━━━━━━━━━ 生成的命令 ━━━━━━━━━━━━━━━━━━━━━┓
+┃                                                        ┃
+┃  find . -name "*.pdf" -mtime -7                        ┃
+┃                                                        ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+```
+
+### Translate and Run
+
+Run `nsh` directly to generate, review, confirm, and execute:
+
+```bash
+nsh "安装 nginx"
+nsh "启动 nginx"
+```
+
+The normal execution flow is:
+
+```text
+translate prompt -> show command -> confirm -> execute -> print output
+```
+
+You can skip the confirmation prompt when you already trust the command:
+
+```bash
+nsh --yes "列出当前目录最大的 10 个文件"
+```
+
+### Root Options
+
+| Option | Description |
+|---|---|
+| `--yes`, `-y` | Skip confirmation and execute immediately. |
+| `--model`, `-m` | Override the configured model for this request. |
+| `--no-session` | Do not include recent session context. |
+| `--interactive`, `-i` | Keep terminal control for commands such as `vim`, `less`, or interactive installers. |
+| `--version`, `-V` | Print the installed nsh version. |
+
+### Session History
+
+nsh keeps the latest natural-language prompt and command pairs in `~/.config/nsh/session.json`, up to 10 entries.
+
+```bash
+nsh session
+nsh session --clear
+```
+
+Example context flow:
+
+```bash
+nsh "安装 nginx"
+# -> sudo apt install -y nginx
+
+nsh "启动它"
+# -> sudo systemctl start nginx
+```
+
+## Safety Model
+
+nsh never executes generated commands by default. It first renders the command and asks for confirmation. If a command matches a known dangerous pattern, nsh displays a warning panel.
+
+| Severity | Examples | Confirmation |
+|---|---|---|
+| LOW | `apt autoremove`, `docker system prune` | Standard confirmation |
+| MEDIUM | `shutdown`, `reboot`, `killall` | Standard confirmation with warning |
+| HIGH | `rm -rf *`, `curl \| bash`, `fdisk` | Standard confirmation with warning |
+| CRITICAL | `rm -rf /`, `mkfs`, fork bombs, overwriting `/etc/passwd` | Double confirmation |
+
+Detected risk categories include:
+
+- destructive filesystem operations
+- raw disk and partition commands
+- remote code execution through shell pipes
+- system shutdown and reboot commands
+- fork bomb patterns
+- sensitive system file overwrites
+- broad process-killing commands
+
+## Project Structure
+
+```text
+nsh/
+├── __init__.py       # package metadata
+├── main.py           # Typer CLI entry point and Rich rendering
+├── config.py         # ~/.config/nsh/config.json management
+├── translator.py     # natural language to command translation
+├── executor.py       # safety scanning and shell execution
+└── session.py        # short-term command context
+```
+
+## Development
+
+Run the CLI locally:
+
+```bash
+python -m nsh.main --help
+python -m nsh.main ask "列出当前目录文件"
+```
+
+Run tests:
+
+```bash
+python -m pytest
+```
+
+Recommended contribution flow:
+
+1. Create a focused branch.
+2. Add or update tests for behavior changes.
+3. Run `python -m pytest`.
+4. Open a pull request with a short summary and validation notes.
+
+## Roadmap
+
+- Add more tests around CLI parsing and safety detection.
+- Support additional model providers through config presets.
+- Improve command explanations without changing the default command-only translation contract.
+- Package and publish releases after the CLI stabilizes.
 
 ## License
 
