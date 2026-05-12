@@ -22,6 +22,9 @@ dist/
 .env.*
 !.env.example
 
+AGENTS.md
+CLAUDE.md
+
 .claude/
 
 *.log
