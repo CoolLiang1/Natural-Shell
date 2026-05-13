@@ -26,6 +26,7 @@ dependencies = [
     "typer>=0.15",
     "rich>=13",
     "anthropic>=0.40",
+    "socksio>=1.0",
 ]
 
 [project.optional-dependencies]
